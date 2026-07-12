@@ -5,12 +5,20 @@ export class AuthRepository {
   // === USER OPERATIONS ===
   
   public async findUserByEmail(email: string) {
-    return prisma.user.findFirst({
-      where: { email, deletedAt: null },
+    if (!email) {
+      return null;
+    }
+
+    return prisma.user.findUnique({
+      where: { email },
     });
   }
 
   public async findUserById(id: string) {
+    if (!id) {
+      return null;
+    }
+
     return prisma.user.findFirst({
       where: { id, deletedAt: null },
     });

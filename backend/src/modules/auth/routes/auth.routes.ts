@@ -25,6 +25,7 @@ router.post("/refresh", controller.refresh); // refresh is validated in service
 router.post("/forgot-password", validate(forgotPasswordSchema), controller.forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), controller.resetPassword);
 router.get("/verify-email", controller.verifyEmail);
+router.post("/verify-email", controller.verifyEmail);
 router.post("/send-otp", validate(sendOtpSchema), controller.sendOtp);
 router.post("/verify-otp", validate(verifyOtpSchema), controller.verifyOtp);
 

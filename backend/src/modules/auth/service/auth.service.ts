@@ -71,8 +71,11 @@ export class AuthService {
 
     await NotificationTrigger.onUserCreated(user.id, user.email);
 
-    // Normally send registration verification email here...
-    console.log(`[Email Mock]: Email verification token for ${user.email}: ${verificationToken}`);
+    try {
+      await Mailer.sendEmailVerificationEmail(user.email, verificationToken);
+    } catch (error) {
+      console.error("[Mailer Error]: Failed to send verification email:", error);
+    }
 
     return {
       id: user.id,
