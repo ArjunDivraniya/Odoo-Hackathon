@@ -27,7 +27,12 @@ import { prisma } from "./config/prisma";
 const app = express();
 
 // Global Middlewares
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Debug endpoint

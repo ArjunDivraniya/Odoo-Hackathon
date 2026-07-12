@@ -16,7 +16,7 @@ export const validate = (schema: ZodSchema, source: "body" | "query" | "params" 
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = (error as any).errors.map((err: any) => ({
+        const errors = error.issues.map((err) => ({
           field: err.path.join("."),
           message: err.message,
         }));
