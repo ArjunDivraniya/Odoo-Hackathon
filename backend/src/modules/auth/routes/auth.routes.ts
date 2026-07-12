@@ -2,6 +2,7 @@ import { Router } from "express";
 import { AuthController } from "../controller/auth.controller";
 import { authenticate } from "../../../middleware/auth.middleware";
 import { validate } from "../../../middleware/validation.middleware";
+import { uploadAvatar } from "../../../middleware/upload.middleware";
 import {
   signupSchema,
   loginSchema,
@@ -34,7 +35,7 @@ router.post("/logout", controller.logout);
 router.get("/me", controller.me);
 router.post("/change-password", validate(changePasswordSchema), controller.changePassword);
 router.patch("/profile", validate(updateProfileSchema), controller.updateProfile);
-router.post("/avatar", controller.uploadAvatar);
+router.post("/avatar", uploadAvatar.single("avatar"), controller.uploadAvatar);
 router.get("/sessions", controller.getSessions);
 router.delete("/sessions/:id", controller.revokeSession);
 router.get("/login-history", controller.getLoginHistory);

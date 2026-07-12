@@ -2,8 +2,7 @@ import { Router } from "express";
 import { AssetImageController } from "../controller/asset-image.controller";
 import { authenticate } from "../../../middleware/auth.middleware";
 import { requirePermission } from "../../../middleware/permission.middleware";
-import { validate } from "../../../middleware/validation.middleware";
-import { createAssetImageSchema, updateAssetImageSchema } from "../validator/asset-image.validator";
+import { uploadAssetImage } from "../../../middleware/upload.middleware";
 
 const router = Router();
 const controller = new AssetImageController();
@@ -13,7 +12,7 @@ router.use(authenticate as any);
 router.post(
   "/",
   requirePermission("asset_image:create") as any,
-  validate(createAssetImageSchema),
+  uploadAssetImage.single("image"),
   controller.create
 );
 router.get(
@@ -29,7 +28,7 @@ router.get(
 router.patch(
   "/:id",
   requirePermission("asset_image:update") as any,
-  validate(updateAssetImageSchema),
+  uploadAssetImage.single("image"),
   controller.update
 );
 router.delete(

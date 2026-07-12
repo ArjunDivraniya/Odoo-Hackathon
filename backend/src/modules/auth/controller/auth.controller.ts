@@ -167,7 +167,12 @@ export class AuthController {
   public uploadAvatar = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.user!.id;
-      const avatarUrl = req.body.avatarUrl; // or file path in multi-part form
+      const file = req.file as Express.Multer.File;
+      const avatarUrl = file ? file.path : req.body.avatarUrl;
+      if (!avatarUrl) {
+        res.status(400).json({ success: false, message: "Please provide an image file or avatar URL." });
+        return;
+      }
       const result = await this.service.uploadAvatar(userId, avatarUrl);
       res.status(200).json({
         success: true,

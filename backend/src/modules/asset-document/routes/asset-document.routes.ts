@@ -2,8 +2,7 @@ import { Router } from "express";
 import { AssetDocumentController } from "../controller/asset-document.controller";
 import { authenticate } from "../../../middleware/auth.middleware";
 import { requirePermission } from "../../../middleware/permission.middleware";
-import { validate } from "../../../middleware/validation.middleware";
-import { createAssetDocumentSchema, updateAssetDocumentSchema } from "../validator/asset-document.validator";
+import { uploadDocument } from "../../../middleware/upload.middleware";
 
 const router = Router();
 const controller = new AssetDocumentController();
@@ -13,7 +12,7 @@ router.use(authenticate as any);
 router.post(
   "/",
   requirePermission("asset_document:create") as any,
-  validate(createAssetDocumentSchema),
+  uploadDocument.single("document"),
   controller.create
 );
 router.get(
@@ -29,7 +28,7 @@ router.get(
 router.patch(
   "/:id",
   requirePermission("asset_document:update") as any,
-  validate(updateAssetDocumentSchema),
+  uploadDocument.single("document"),
   controller.update
 );
 router.delete(

@@ -903,6 +903,7 @@ model AssetImage {
   id         String    @id @default(uuid()) @db.Uuid
   assetId    String    @map("asset_id") @db.Uuid
   fileId     String?   @map("file_id") @db.Uuid
+  imageUrl   String?   @map("image_url") @db.VarChar(500)
   imageType  String    @default("GENERAL") @map("image_type") @db.VarChar(50)
   caption    String?   @db.VarChar(255)
   isPrimary  Boolean   @default(false) @map("is_primary")
@@ -925,6 +926,10 @@ model AssetDocument {
   id           String   @id @default(uuid()) @db.Uuid
   assetId      String   @map("asset_id") @db.Uuid
   fileId       String?  @map("file_id") @db.Uuid
+  fileUrl      String?  @map("file_url") @db.VarChar(500)
+  fileName     String?  @map("file_name") @db.VarChar(255)
+  fileSize     Int?     @map("file_size")
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
   documentType String   @map("document_type") @db.VarChar(50)
   title        String   @db.VarChar(200)
   description  String?  @db.Text

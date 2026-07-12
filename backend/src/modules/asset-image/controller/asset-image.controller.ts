@@ -9,7 +9,15 @@ export class AssetImageController {
     try {
       const currentUserId = req.user!.id;
       const companyId = req.user!.companyId;
-      const result = await this.service.createImage(req.body, currentUserId, companyId);
+      const file = req.file as Express.Multer.File;
+      const body = {
+        ...req.body,
+        ...(file && {
+          imageUrl: file.path,
+          imageType: req.body.imageType || "GENERAL",
+        }),
+      };
+      const result = await this.service.createImage(body, currentUserId, companyId);
       res.status(201).json({
         success: true,
         message: "Asset image created successfully",
@@ -25,7 +33,12 @@ export class AssetImageController {
       const id = req.params.id as string;
       const currentUserId = req.user!.id;
       const companyId = req.user!.companyId;
-      const result = await this.service.updateImage(id, req.body, currentUserId, companyId);
+      const file = req.file as Express.Multer.File;
+      const body = {
+        ...req.body,
+        ...(file && { imageUrl: file.path }),
+      };
+      const result = await this.service.updateImage(id, body, currentUserId, companyId);
       res.status(200).json({
         success: true,
         message: "Asset image updated successfully",

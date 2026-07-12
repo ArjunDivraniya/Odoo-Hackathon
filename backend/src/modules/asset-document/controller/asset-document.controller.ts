@@ -9,7 +9,17 @@ export class AssetDocumentController {
     try {
       const currentUserId = req.user!.id;
       const companyId = req.user!.companyId;
-      const result = await this.service.createDocument(req.body, currentUserId, companyId);
+      const file = req.file as Express.Multer.File;
+      const body = {
+        ...req.body,
+        ...(file && {
+          fileUrl: file.path,
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+        }),
+      };
+      const result = await this.service.createDocument(body, currentUserId, companyId);
       res.status(201).json({
         success: true,
         message: "Asset document created successfully",
@@ -25,7 +35,17 @@ export class AssetDocumentController {
       const id = req.params.id as string;
       const currentUserId = req.user!.id;
       const companyId = req.user!.companyId;
-      const result = await this.service.updateDocument(id, req.body, currentUserId, companyId);
+      const file = req.file as Express.Multer.File;
+      const body = {
+        ...req.body,
+        ...(file && {
+          fileUrl: file.path,
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+        }),
+      };
+      const result = await this.service.updateDocument(id, body, currentUserId, companyId);
       res.status(200).json({
         success: true,
         message: "Asset document updated successfully",
