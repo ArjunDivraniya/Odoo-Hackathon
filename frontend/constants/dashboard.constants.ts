@@ -1,0 +1,30 @@
+export const DASHBOARD_COLORS = {
+  AVAILABLE: "#10b981",
+  ALLOCATED: "#3b82f6",
+  UNDER_MAINTENANCE: "#f59e0b",
+  RESERVED: "#8b5cf6",
+  LOST: "#ef4444",
+  STOLEN: "#ef4444",
+  DISPOSED: "#6b7280",
+  RETIRED: "#9ca3af",
+  DAMAGED: "#f97316",
+  PRIMARY: "#3b82f6",
+  SUCCESS: "#10b981",
+  WARNING: "#f59e0b",
+  DANGER: "#ef4444",
+  MUTED: "#94a3b8"
+};
+
+export const ACTIVITY_TYPES = {
+  ALLOCATION: "ALLOCATION",
+  MAINTENANCE: "MAINTENANCE",
+  AUDIT: "AUDIT",
+  TRANSFER: "TRANSFER",
+  RETURN: "RETURN"
+};
+
+export const CHART_HEIGHTS = {
+  SMALL: 250,
+  MEDIUM: 300,
+  LARGE: 400
+};
