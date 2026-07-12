@@ -79,6 +79,7 @@ export class AuthRepository {
   // === SESSION OPERATIONS ===
 
   public async createSession(data: {
+    id?: string;
     userId: string;
     tokenHash: string;
     deviceInfo?: any;
@@ -88,6 +89,7 @@ export class AuthRepository {
   }) {
     return prisma.session.create({
       data: {
+        id: data.id,
         userId: data.userId,
         tokenHash: data.tokenHash,
         deviceInfo: data.deviceInfo || null,

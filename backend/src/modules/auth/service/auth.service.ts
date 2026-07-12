@@ -183,6 +183,7 @@ export class AuthService {
 
     // Persist Session & Refresh Token
     await this.repository.createSession({
+      id: sessionId,
       userId: user.id,
       tokenHash,
       deviceInfo: {
