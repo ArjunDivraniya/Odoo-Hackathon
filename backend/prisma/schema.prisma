@@ -5,7 +5,8 @@
 // ============================================================================
 
 generator client {
-  provider = "prisma-client"
+  provider   = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
@@ -1110,8 +1111,11 @@ model TransferRequest {
   deletedAt        DateTime?      @map("deleted_at")
 
   // Relations
-  asset    Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  history  TransferHistory[]
+  asset           Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  requestedByUser User             @relation("RequestedByTransfer", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approvedByUser  User?            @relation("ApprovedByTransfer", fields: [approvedBy], references: [id], onDelete: SetNull)
+  receivedByUser  User?            @relation("ReceivedByTransfer", fields: [receivedBy], references: [id], onDelete: SetNull)
+  history         TransferHistory[]
 
   @@index([companyId])
   @@index([assetId])
@@ -1446,8 +1450,9 @@ model AuditAssignment {
   deletedAt      DateTime?   @map("deleted_at")
 
   // Relations
-  cycle  AuditCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  user   User          @relation(fields: [auditorId], references: [id], onDelete: Cascade)
+  cycle   AuditCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [auditorId], references: [id], onDelete: Cascade)
+  results AuditResult[]
 
   @@unique([cycleId, auditorId])
   @@index([cycleId])
