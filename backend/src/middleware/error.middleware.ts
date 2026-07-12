@@ -54,11 +54,11 @@ export const errorMiddleware = (
   }
 
   // Log unknown server errors
-  console.error("[Unhandled Error]:", err);
+  console.error("[Unhandled Error]:", err.name, err.message, (err as any).stack?.substring(0, 500));
 
   res.status(500).json({
     success: false,
-    message: process.env.NODE_ENV === "production" ? "Internal Server Error" : errorMessage,
-    errors: [],
+    message: process.env.NODE_ENV === "production" ? "Internal Server Error" : err.message?.substring(0, 500) || errorMessage,
+    errors: [{ type: err.constructor?.name }],
   });
 };

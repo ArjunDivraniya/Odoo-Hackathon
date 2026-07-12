@@ -12,12 +12,33 @@ import floorRoutes from "./modules/floor/routes/floor.routes";
 import locationRoutes from "./modules/location/routes/location.routes";
 import departmentRoutes from "./modules/department/routes/department.routes";
 import employeeRoutes from "./modules/employee/routes/employee.routes";
+import assetCategoryRoutes from "./modules/asset-category/routes/asset-category.routes";
+import assetRoutes from "./modules/asset/routes/asset.routes";
+import assetImageRoutes from "./modules/asset-image/routes/asset-image.routes";
+import assetDocumentRoutes from "./modules/asset-document/routes/asset-document.routes";
+import assetQrRoutes from "./modules/asset-qr/routes/asset-qr.routes";
+import allocationRoutes from "./modules/allocation/routes/allocation.routes";
+import returnRoutes from "./modules/return/routes/asset-return.routes";
+import transferRoutes from "./modules/transfer/routes/transfer.routes";
+import resourceRoutes from "./modules/resource/routes/resource.routes";
+import bookingRoutes from "./modules/booking/routes/booking.routes";
+import { prisma } from "./config/prisma";
 
 const app = express();
 
 // Global Middlewares
 app.use(cors());
 app.use(express.json());
+
+// Debug endpoint
+app.get("/debug/prisma", async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst({ where: { email: "test@assetflow.com" } });
+    res.json({ success: true, user: user ? { id: user.id, email: user.email } : null });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message, stack: err.stack?.substring(0, 1000), name: err.constructor?.name });
+  }
+});
 
 // API Route Mounts
 app.use("/api/v1/auth", authRoutes);
@@ -31,6 +52,16 @@ app.use("/api/v1/floors", floorRoutes);
 app.use("/api/v1/locations", locationRoutes);
 app.use("/api/v1/departments", departmentRoutes);
 app.use("/api/v1/employees", employeeRoutes);
+app.use("/api/v1/asset-categories", assetCategoryRoutes);
+app.use("/api/v1/assets", assetRoutes);
+app.use("/api/v1/asset-images", assetImageRoutes);
+app.use("/api/v1/asset-documents", assetDocumentRoutes);
+app.use("/api/v1/asset-qr-codes", assetQrRoutes);
+app.use("/api/v1/allocations", allocationRoutes);
+app.use("/api/v1/returns", returnRoutes);
+app.use("/api/v1/transfers", transferRoutes);
+app.use("/api/v1/resources", resourceRoutes);
+app.use("/api/v1/bookings", bookingRoutes);
 
 // Root path check
 app.get("/", (req, res) => {
