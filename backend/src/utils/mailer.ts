@@ -54,6 +54,21 @@ export class Mailer {
   }
 
   /**
+   * Sends a generic email using SMTP. Used by the notification module to
+   * deliver email-based notifications rendered from EmailTemplate definitions.
+   */
+  public static async sendEmail(to: string, subject: string, html: string): Promise<void> {
+    const mailOptions = {
+      from: `"AssetFlow" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html,
+    };
+
+    await this.transporter.sendMail(mailOptions);
+  }
+
+  /**
    * Sends an email verification link to the user email using SMTP
    */
   public static async sendEmailVerificationEmail(to: string, token: string): Promise<void> {

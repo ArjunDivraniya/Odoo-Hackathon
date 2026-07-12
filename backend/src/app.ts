@@ -22,6 +22,18 @@ import returnRoutes from "./modules/return/routes/asset-return.routes";
 import transferRoutes from "./modules/transfer/routes/transfer.routes";
 import resourceRoutes from "./modules/resource/routes/resource.routes";
 import bookingRoutes from "./modules/booking/routes/booking.routes";
+import maintenanceRoutes from "./modules/maintenance/routes/maintenance.routes";
+import auditRoutes from "./modules/audit/routes/audit.routes";
+import notificationRoutes from "./modules/notification/routes/notification.routes";
+import activityLogRoutes from "./modules/activity-log/routes/activity-log.routes";
+import systemRoutes from "./modules/system/routes/system.routes";
+import lookupRoutes from "./modules/lookup/routes/lookup.routes";
+import emailRoutes from "./modules/email/routes/email.routes";
+import fileRoutes from "./modules/file-storage/routes/file-storage.routes";
+import dashboardRoutes from "./modules/dashboard/routes/dashboard.routes";
+import reportsRoutes from "./modules/reports/routes/reports.routes";
+import analyticsRoutes from "./modules/analytics/routes/analytics.routes";
+import searchRoutes from "./modules/search/routes/search.routes";
 import { prisma } from "./config/prisma";
 
 const app = express();
@@ -67,6 +79,19 @@ app.use("/api/v1/returns", returnRoutes);
 app.use("/api/v1/transfers", transferRoutes);
 app.use("/api/v1/resources", resourceRoutes);
 app.use("/api/v1/bookings", bookingRoutes);
+app.use("/api/v1/maintenance", maintenanceRoutes);
+app.use("/api/v1/audits", auditRoutes);
+app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/activity-logs", activityLogRoutes);
+app.use("/api/v1/system", systemRoutes);
+app.use("/api/v1/lookups", lookupRoutes);
+app.use("/api/v1/email-templates", emailRoutes);
+app.use("/api/v1/files", fileRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/reports", reportsRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/search", searchRoutes);
+app.use("/api/v1/search", searchRoutes);
 
 // Root path check
 app.get("/", (req, res) => {
