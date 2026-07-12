@@ -1,13 +1,2169 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// ============================================================================
+// AssetFlow Enterprise Asset & Resource Management System
+// Production-Ready Prisma Schema for PostgreSQL (NeonDB)
+// Version: 1.0.0
+// ============================================================================
 
 generator client {
   provider = "prisma-client"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum AssetStatus {
+  AVAILABLE
+  ALLOCATED
+  UNDER_MAINTENANCE
+  RESERVED
+  TRANSFERRED
+  LOST
+  STOLEN
+  DISPOSED
+  RETIRED
+  DAMAGED
+}
+
+enum AllocationStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  RETURNED
+  OVERDUE
+  CANCELLED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  OVERDUE
+}
+
+enum MaintenanceStatus {
+  REQUESTED
+  APPROVED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  VERIFIED
+  REJECTED
+  CANCELLED
+}
+
+enum AuditStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  REVIEWING
+  CLOSED
+  CANCELLED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+  RESIGNED
+  RETIRED
+}
+
+enum DepartmentStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  LOCKED
+  PENDING_VERIFICATION
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+  DISMISSED
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  NEEDS_REPAIR
+  NON_FUNCTIONAL
+}
+
+enum TransferStatus {
+  REQUESTED
+  APPROVED
+  IN_TRANSIT
+  RECEIVED
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ESCALATED
+  CANCELLED
+}
+
+enum RoleType {
+  SYSTEM
+  CUSTOM
+  TEMPLATE
+}
+
+enum PermissionType {
+  MODULE
+  ACTION
+  FIELD
+  RECORD
+}
+
+// ============================================================================
+// MODULE 01-06: AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+
+/// Core user account. Every system user (employee, admin, vendor) has one record.
+model User {
+  id               String      @id @default(uuid()) @db.Uuid
+  email            String      @unique @db.VarChar(255)
+  passwordHash     String?     @map("password_hash") @db.VarChar(255)
+  firstName        String      @map("first_name") @db.VarChar(100)
+  lastName         String      @map("last_name") @db.VarChar(100)
+  phone            String?     @db.VarChar(20)
+  avatarUrl        String?     @map("avatar_url") @db.VarChar(500)
+  status           UserStatus  @default(PENDING_VERIFICATION)
+  emailVerified    Boolean     @default(false) @map("email_verified")
+  phoneVerified    Boolean     @default(false) @map("phone_verified")
+  mfaEnabled       Boolean     @default(false) @map("mfa_enabled")
+  mfaSecret        String?     @map("mfa_secret") @db.VarChar(255)
+  lastLoginAt      DateTime?   @map("last_login_at")
+  lastLoginIp      String?     @map("last_login_ip") @db.VarChar(45)
+  failedLoginCount Int         @default(0) @map("failed_login_count")
+  lockedUntil      DateTime?   @map("locked_until")
+  passwordChangedAt DateTime?  @map("password_changed_at")
+  timezone         String      @default("UTC") @db.VarChar(50)
+  language         String      @default("en") @db.VarChar(10)
+  metadata         Json?       @db.Json
+  createdBy        String?     @map("created_by") @db.Uuid
+  updatedBy        String?     @map("updated_by") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  deletedAt        DateTime?   @map("deleted_at")
+
+  // Relations
+  employeeProfile    EmployeeProfile?
+  roles              UserRole[]
+  sessions           Session[]
+  refreshTokens      RefreshToken[]
+  loginHistories     LoginHistory[]
+  passwordResets     PasswordReset[]
+  emailVerifications EmailVerification[]
+  otpCodes           OtpCode[]
+  deviceHistories    DeviceHistory[]
+  notifications      Notification[]
+  notificationPrefs  NotificationPreference[]
+  activityLogs       ActivityLog[]
+  createdAssets      Asset[]              @relation("AssetCreator")
+  updatedAssets      Asset[]              @relation("AssetUpdater")
+  allocations        AssetAllocation[]    @relation("AllocationUser")
+  allocatedByAlloc   AssetAllocation[]    @relation("AllocatedByUser")
+  approvedByAlloc    AssetAllocation[]    @relation("ApprovedByAlloc")
+  approvalRequests   ApprovalRequest[]    @relation("ApprovalRequestor")
+  approvedApprovals  ApprovalRequest[]    @relation("ApprovalApprover")
+  auditAssignments   AuditAssignment[]
+  requestedByMaint   MaintenanceRequest[] @relation("RequestedByMaint")
+  approvedByMaint    MaintenanceRequest[] @relation("ApprovedByMaint")
+  verifiedByMaint    MaintenanceRequest[] @relation("VerifiedByMaint")
+  requestedByTransfer TransferRequest[]   @relation("RequestedByTransfer")
+  approvedTransfers  TransferRequest[]    @relation("ApprovedByTransfer")
+  receivedTransfers  TransferRequest[]    @relation("ReceivedByTransfer")
+  apiTokens          ApiToken[]
+  bookingsBooked     ResourceBooking[]    @relation("BookedByUser")
+  dashboardWidgets   DashboardWidget[]
+  reportMetadata     ReportMetadata[]     @relation("ReportCreator")
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// Role definitions for RBAC. System roles are seeded, custom roles created by admins.
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  type        RoleType @default(CUSTOM)
+  isDefault   Boolean  @default(false) @map("is_default")
+  isActive    Boolean  @default(true) @map("is_active")
+  companyId   String?  @map("company_id") @db.Uuid
+  permissions Json?    @db.Json
+  metadata    Json?    @db.Json
+  createdBy   String?  @map("created_by") @db.Uuid
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  company         Company?           @relation(fields: [companyId], references: [id])
+  users           UserRole[]
+  rolePermissions RolePermission[]
+
+  @@index([companyId])
+  @@index([type])
+  @@index([isDefault])
+  @@map("roles")
+}
+
+/// Granular permissions for fine-grained access control.
+model Permission {
+  id          String         @id @default(uuid()) @db.Uuid
+  name        String         @unique @db.VarChar(100)
+  slug        String         @unique @db.VarChar(150)
+  module      String         @db.VarChar(50)
+  action      String         @db.VarChar(50)
+  field       String?        @db.VarChar(50)
+  type        PermissionType @default(MODULE)
+  description String?        @db.Text
+  isActive    Boolean        @default(true) @map("is_active")
+  parentId    String?        @map("parent_id") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  parent         Permission?        @relation("PermissionHierarchy", fields: [parentId], references: [id])
+  children       Permission[]       @relation("PermissionHierarchy")
+  rolePermissions RolePermission[]
+
+  @@index([slug])
+  @@index([module])
+  @@index([parentId])
+  @@map("permissions")
+}
+
+/// Junction: Users ↔ Roles (many-to-many).
+model UserRole {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  roleId       String    @map("role_id") @db.Uuid
+  companyId    String?   @map("company_id") @db.Uuid
+  officeId     String?   @map("office_id") @db.Uuid
+  departmentId String?   @map("department_id") @db.Uuid
+  isActive     Boolean   @default(true) @map("is_active")
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  expiresAt    DateTime? @map("expires_at")
+  assignedBy   String?   @map("assigned_by") @db.Uuid
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, companyId, officeId, departmentId])
+  @@index([userId])
+  @@index([roleId])
+  @@index([officeId])
+  @@index([departmentId])
+  @@map("user_roles")
+}
+
+/// Junction: Roles ↔ Permissions (many-to-many).
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Active user sessions for session management and revocation.
+model Session {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  tokenHash      String   @unique @map("token_hash") @db.VarChar(255)
+  deviceInfo     Json?    @map("device_info") @db.Json
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.Text
+  expiresAt      DateTime @map("expires_at")
+  lastActivityAt DateTime @default(now()) @map("last_activity_at")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Refresh tokens for JWT token rotation strategy.
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  sessionId   String?   @map("session_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  replacedBy  String?   @map("replaced_by") @db.Uuid
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// Audit trail for all login attempts (successful and failed).
+model LoginHistory {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  emailAttempted String  @map("email_attempted") @db.VarChar(255)
+  success       Boolean
+  failureReason String?  @map("failure_reason") @db.VarChar(100)
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  userAgent     String?  @map("user_agent") @db.Text
+  locationData  Json?    @map("location_data") @db.Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([emailAttempted])
+  @@index([createdAt])
+  @@index([success])
+  @@map("login_histories")
+}
+
+/// Password reset request tokens.
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  ipAddress String?   @map("ip_address") @db.VarChar(45)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_resets")
+}
+
+/// Email verification tokens for new account activation.
+model EmailVerification {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  email      String    @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at")
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("email_verifications")
+}
+
+/// One-time password codes for MFA and verification flows.
+model OtpCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  codeHash   String    @map("code_hash") @db.VarChar(255)
+  type       String    @db.VarChar(20)
+  expiresAt  DateTime  @map("expires_at")
+  attempts   Int       @default(0)
+  maxAttempts Int      @default(3) @map("max_attempts")
+  verifiedAt DateTime? @map("verified_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([codeHash])
+  @@index([type])
+  @@map("otp_codes")
+}
+
+/// Device history tracking for login anomaly detection.
+model DeviceHistory {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  deviceFingerprint String   @map("device_fingerprint") @db.VarChar(255)
+  deviceName        String?  @map("device_name") @db.VarChar(100)
+  deviceType        String?  @map("device_type") @db.VarChar(50)
+  os                String?  @db.VarChar(50)
+  browser           String?  @db.VarChar(50)
+  isTrusted         Boolean  @default(false) @map("is_trusted")
+  lastUsedAt        DateTime @default(now()) @map("last_used_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceFingerprint])
+  @@index([userId])
+  @@index([deviceFingerprint])
+  @@map("device_histories")
+}
+
+// ============================================================================
+// MODULE 07-14: ORGANIZATION STRUCTURE
+// ============================================================================
+
+/// Top-level company entity. Multi-tenant isolation is based on this.
+model Company {
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String    @db.VarChar(200)
+  slug               String    @unique @db.VarChar(200)
+  legalName          String?   @map("legal_name") @db.VarChar(200)
+  taxId              String?   @map("tax_id") @db.VarChar(50)
+  registrationNumber String?   @map("registration_number") @db.VarChar(50)
+  email              String?   @db.VarChar(255)
+  phone              String?   @db.VarChar(20)
+  website            String?   @db.VarChar(255)
+  logoUrl            String?   @map("logo_url") @db.VarChar(500)
+  addressLine1       String?   @map("address_line1") @db.VarChar(255)
+  addressLine2       String?   @map("address_line2") @db.VarChar(255)
+  city               String?   @db.VarChar(100)
+  state              String?   @db.VarChar(100)
+  countryId          String?   @map("country_id") @db.Uuid
+  postalCode         String?   @map("postal_code") @db.VarChar(20)
+  timezone           String    @default("UTC") @db.VarChar(50)
+  currency           String    @default("USD") @db.VarChar(3)
+  fiscalYearStart    Int       @default(1) @map("fiscal_year_start")
+  isActive           Boolean   @default(true) @map("is_active")
+  settings           Json?     @db.Json
+  metadata           Json?     @db.Json
+  createdBy          String?   @map("created_by") @db.Uuid
+  updatedBy          String?   @map("updated_by") @db.Uuid
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  // Relations
+  roles            Role[]
+  offices          Office[]
+  buildings         Building[]
+  floors            Floor[]
+  locations         Location[]
+  departments       Department[]
+  assets            Asset[]
+  employees         EmployeeProfile[]
+  auditCycles       AuditCycle[]
+  apiTokens         ApiToken[]
+  lookupTables      LookupTable[]
+  masterStatuses    MasterStatusTable[]
+  holidayCalendars  HolidayCalendar[]
+  fileStorages      FileStorage[]
+  systemSettings    SystemSetting[]
+  reportMetadata    ReportMetadata[]   @relation("ReportCompany")
+  assetCategories   AssetCategory[]
+  sharedResources   SharedResource[]
+  tags              Tag[]
+  customAttributes  CustomAttribute[]
+  activityLogs      ActivityLog[]
+
+  @@index([slug])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("companies")
+}
+
+/// Physical office locations within a company.
+model Office {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  name           String    @db.VarChar(200)
+  code           String    @db.VarChar(20)
+  description    String?   @db.Text
+  addressLine1   String?   @map("address_line1") @db.VarChar(255)
+  addressLine2   String?   @map("address_line2") @db.VarChar(255)
+  city           String?   @db.VarChar(100)
+  state          String?   @db.VarChar(100)
+  countryId      String?   @map("country_id") @db.Uuid
+  postalCode     String?   @map("postal_code") @db.VarChar(20)
+  latitude       Decimal?  @db.Decimal(10, 8)
+  longitude      Decimal?  @db.Decimal(11, 8)
+  phone          String?   @db.VarChar(20)
+  email          String?   @db.VarChar(255)
+  timezone       String    @default("UTC") @db.VarChar(50)
+  isHq           Boolean   @default(false) @map("is_hq")
+  isActive       Boolean   @default(true) @map("is_active")
+  maxCapacity    Int?      @map("max_capacity")
+  metadata       Json?     @db.Json
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  // Relations
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  buildings  Building[]
+  assets     Asset[]
+  employees  EmployeeProfile[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([isActive])
+  @@map("offices")
+}
+
+/// Buildings within an office campus.
+model Building {
+  id           String    @id @default(uuid()) @db.Uuid
+  companyId    String    @map("company_id") @db.Uuid
+  officeId     String    @map("office_id") @db.Uuid
+  name         String    @db.VarChar(200)
+  code         String    @db.VarChar(20)
+  description  String?   @db.Text
+  totalFloors  Int       @default(1) @map("total_floors")
+  buildingType String    @default("OFFICE") @map("building_type") @db.VarChar(50)
+  isActive     Boolean   @default(true) @map("is_active")
+  metadata     Json?     @db.Json
+  createdBy    String?   @map("created_by") @db.Uuid
+  updatedBy    String?   @map("updated_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  office  Office   @relation(fields: [officeId], references: [id], onDelete: Cascade)
+  floors  Floor[]
+  assets  Asset[]
+
+  @@unique([officeId, code])
+  @@index([officeId])
+  @@index([companyId])
+  @@map("buildings")
+}
+
+/// Floors within a building.
+model Floor {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  buildingId  String    @map("building_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  levelNumber Int       @map("level_number")
+  description String?   @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  metadata    Json?     @db.Json
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  building  Building   @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  locations Location[]
+  assets    Asset[]
+
+  @@unique([buildingId, levelNumber])
+  @@index([buildingId])
+  @@index([companyId])
+  @@map("floors")
+}
+
+/// Specific physical locations (rooms, zones, desks).
+model Location {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  floorId     String?   @map("floor_id") @db.Uuid
+  name        String    @db.VarChar(200)
+  code        String    @db.VarChar(20)
+  description String?   @db.Text
+  locationType String   @default("ROOM") @map("location_type") @db.VarChar(50)
+  capacity    Int?      @map("max_capacity")
+  isBookable  Boolean   @default(false) @map("is_bookable")
+  isActive    Boolean   @default(true) @map("is_active")
+  metadata    Json?     @db.Json
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  floor   Floor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  assets  Asset[]
+
+  @@unique([floorId, code])
+  @@index([companyId])
+  @@index([floorId])
+  @@index([locationType])
+  @@index([isBookable])
+  @@map("locations")
+}
+
+/// Organizational departments with hierarchical structure.
+model Department {
+  id              String           @id @default(uuid()) @db.Uuid
+  companyId       String           @map("company_id") @db.Uuid
+  parentId        String?          @map("parent_id") @db.Uuid
+  officeId        String?          @map("office_id") @db.Uuid
+  name            String           @db.VarChar(200)
+  code            String           @db.VarChar(20)
+  description     String?          @db.Text
+  status          DepartmentStatus @default(ACTIVE)
+  headId          String?          @map("head_id") @db.Uuid
+  budget          Decimal?         @db.Decimal(15, 2)
+  costCenter      String?          @map("cost_center") @db.VarChar(50)
+  level           Int              @default(0)
+  createdBy       String?          @map("created_by") @db.Uuid
+  updatedBy       String?          @map("updated_by") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  deletedAt       DateTime?        @map("deleted_at")
+
+  // Relations
+  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent             Department?          @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children           Department[]         @relation("DeptHierarchy")
+  employees          EmployeeProfile[]
+  ancestorOf         DepartmentHierarchy[] @relation("DeptAncestor")
+  descendantOf       DepartmentHierarchy[] @relation("DeptDescendant")
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([parentId])
+  @@index([officeId])
+  @@index([status])
+  @@map("departments")
+}
+
+/// Closure table for efficient department hierarchy traversal.
+model DepartmentHierarchy {
+  id            String   @id @default(uuid()) @db.Uuid
+  ancestorId    String   @map("ancestor_id") @db.Uuid
+  descendantId  String   @map("descendant_id") @db.Uuid
+  depth         Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  ancestor   Department @relation("DeptAncestor", fields: [ancestorId], references: [id], onDelete: Cascade)
+  descendant Department @relation("DeptDescendant", fields: [descendantId], references: [id], onDelete: Cascade)
+
+  @@unique([ancestorId, descendantId])
+  @@index([ancestorId])
+  @@index([descendantId])
+  @@map("department_hierarchies")
+}
+
+/// Employee profiles linked to users with organizational data.
+model EmployeeProfile {
+  id                     String         @id @default(uuid()) @db.Uuid
+  userId                 String         @unique @map("user_id") @db.Uuid
+  companyId              String         @map("company_id") @db.Uuid
+  employeeId             String         @unique @map("employee_id") @db.VarChar(50)
+  departmentId           String?        @map("department_id") @db.Uuid
+  officeId               String?        @map("office_id") @db.Uuid
+  managerId              String?        @map("manager_id") @db.Uuid
+  jobTitle               String?        @map("job_title") @db.VarChar(200)
+  jobLevel               String?        @map("job_level") @db.VarChar(50)
+  employmentType         String         @default("FULL_TIME") @map("employment_type") @db.VarChar(50)
+  status                 EmployeeStatus @default(ACTIVE)
+  hireDate               DateTime       @map("hire_date")
+  terminationDate        DateTime?      @map("termination_date")
+  salary                 Decimal?       @db.Decimal(15, 2)
+  emergencyContact       Json?          @map("emergency_contact") @db.Json
+  address                Json?          @db.Json
+  documents              Json?          @db.Json
+  metadata               Json?          @db.Json
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  deletedAt              DateTime?      @map("deleted_at")
+  createdBy              String?        @map("created_by") @db.Uuid
+  updatedBy              String?        @map("updated_by") @db.Uuid
+
+  // Relations
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company       Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  office        Office?           @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  department    Department?       @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([departmentId])
+  @@index([officeId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([managerId])
+  @@map("employee_profiles")
+}
+
+// ============================================================================
+// MODULE 15-26: ASSET MANAGEMENT
+// ============================================================================
+
+/// Hierarchical asset categorization (e.g., IT > Laptops > MacBooks).
+model AssetCategory {
+  id                   String               @id @default(uuid()) @db.Uuid
+  companyId            String               @map("company_id") @db.Uuid
+  parentId             String?              @map("parent_id") @db.Uuid
+  name                 String               @db.VarChar(200)
+  code                 String               @db.VarChar(20)
+  description          String?              @db.Text
+  icon                 String?              @db.VarChar(50)
+  color                String?              @db.VarChar(7)
+  depreciationMethod   String?              @map("depreciation_method") @db.VarChar(50)
+  usefulLifeMonths     Int?                 @map("useful_life_months")
+  salvageValuePercent  Decimal?         @map("salvage_value_percent") @db.Decimal(5, 2)
+  requiresMaintenance  Boolean              @default(true) @map("requires_maintenance")
+  requiresCalibration  Boolean              @default(false) @map("requires_calibration")
+  isActive             Boolean              @default(true) @map("is_active")
+  level                Int                  @default(0)
+  sortOrder            Int                  @default(0) @map("sort_order")
+  metadata             Json?                @db.Json
+  createdBy            String?              @map("created_by") @db.Uuid
+  updatedBy            String?              @map("updated_by") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  deletedAt            DateTime?            @map("deleted_at")
+
+  // Relations
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent        AssetCategory?       @relation("CategoryTree", fields: [parentId], references: [id])
+  children      AssetCategory[]      @relation("CategoryTree")
+  customFields  CategoryCustomField[]
+  assets        Asset[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([parentId])
+  @@index([name])
+  @@map("asset_categories")
+}
+
+/// Custom field definitions per category for flexible asset metadata.
+model CategoryCustomField {
+  id            String   @id @default(uuid()) @db.Uuid
+  categoryId    String   @map("category_id") @db.Uuid
+  name          String   @db.VarChar(100)
+  label         String   @db.VarChar(200)
+  fieldType     String   @map("field_type") @db.VarChar(30)
+  isRequired    Boolean  @default(false) @map("is_required")
+  isSearchable  Boolean  @default(false) @map("is_searchable")
+  isFilterable  Boolean  @default(false) @map("is_filterable")
+  defaultValue  Json?    @map("default_value") @db.Json
+  options       Json?    @db.Json
+  validation    Json?    @db.Json
+  sortOrder     Int      @default(0) @map("sort_order")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  category AssetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+  @@map("category_custom_fields")
+}
+
+/// Core asset record. The central entity of the entire system.
+model Asset {
+  id               String          @id @default(uuid()) @db.Uuid
+  companyId        String          @map("company_id") @db.Uuid
+  categoryId       String          @map("category_id") @db.Uuid
+  officeId         String          @map("office_id") @db.Uuid
+  buildingId       String?         @map("building_id") @db.Uuid
+  floorId          String?         @map("floor_id") @db.Uuid
+  locationId       String?         @map("location_id") @db.Uuid
+  departmentId     String?         @map("department_id") @db.Uuid
+  assignedTo       String?         @map("assigned_to") @db.Uuid
+  custodianId      String?         @map("custodian_id") @db.Uuid
+  assetTag         String          @unique @map("asset_tag") @db.VarChar(50)
+  serialNumber     String?         @map("serial_number") @db.VarChar(100)
+  name             String          @db.VarChar(200)
+  description      String?         @db.Text
+  status           AssetStatus     @default(AVAILABLE)
+  condition        AssetCondition  @default(GOOD)
+  purchaseDate     DateTime?       @map("purchase_date")
+  purchasePrice    Decimal?      @map("purchase_price") @db.Decimal(15, 2)
+  currentValue     Decimal?      @map("current_value") @db.Decimal(15, 2)
+  warrantyExpiry   DateTime?       @map("warranty_expiry")
+  expectedLifeYears Int?           @map("expected_life_years")
+  manufacturer     String?         @db.VarChar(200)
+  model            String?         @db.VarChar(100)
+  barcode          String?         @unique @db.VarChar(100)
+  rfidTag          String?         @unique @map("rfid_tag") @db.VarChar(100)
+  qrCodeId         String?         @map("qr_code_id") @db.Uuid
+  imageUrl         String?         @map("image_url") @db.VarChar(500)
+  customAttributes Json?           @map("custom_attributes") @db.Json
+  specifications   Json?           @db.Json
+  depreciation     Json?           @db.Json
+  metadata         Json?           @db.Json
+  isActive         Boolean         @default(true) @map("is_active")
+  createdBy        String?         @map("created_by") @db.Uuid
+  updatedBy        String?         @map("updated_by") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  deletedAt        DateTime?       @map("deleted_at")
+
+  // Relations
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category            AssetCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  office              Office               @relation(fields: [officeId], references: [id], onDelete: Restrict)
+  building            Building?            @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  floor               Floor?               @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  location            Location?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  creator             User?                @relation("AssetCreator", fields: [createdBy], references: [id])
+  updater             User?                @relation("AssetUpdater", fields: [updatedBy], references: [id])
+  images              AssetImage[]
+  documents           AssetDocument[]
+  qrCode              AssetQrCode?
+  statusHistory       AssetStatusHistory[]
+  allocations         AssetAllocation[]
+  returns             AssetReturn[]
+  tags                AssetTag[]
+  labels              AssetLabel[]
+  maintenanceRequests MaintenanceRequest[]
+  transferRequests    TransferRequest[]
+  audits              AuditResult[]
+  rfidTagRecord       FutureRfidTag?
+  aiPredictions       AiPrediction[]
+  sharedResource      SharedResource?
+
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([officeId])
+  @@index([buildingId])
+  @@index([floorId])
+  @@index([locationId])
+  @@index([departmentId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([condition])
+  @@index([createdAt])
+  @@index([purchaseDate])
+  @@map("assets")
+}
+
+/// Image attachments for assets.
+model AssetImage {
+  id         String    @id @default(uuid()) @db.Uuid
+  assetId    String    @map("asset_id") @db.Uuid
+  fileId     String?   @map("file_id") @db.Uuid
+  imageType  String    @default("GENERAL") @map("image_type") @db.VarChar(50)
+  caption    String?   @db.VarChar(255)
+  isPrimary  Boolean   @default(false) @map("is_primary")
+  sortOrder  Int       @default(0) @map("sort_order")
+  takenAt    DateTime? @map("taken_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([isPrimary])
+  @@map("asset_images")
+}
+
+/// Document attachments for assets (invoices, warranty cards, manuals).
+model AssetDocument {
+  id           String   @id @default(uuid()) @db.Uuid
+  assetId      String   @map("asset_id") @db.Uuid
+  fileId       String?  @map("file_id") @db.Uuid
+  documentType String   @map("document_type") @db.VarChar(50)
+  title        String   @db.VarChar(200)
+  description  String?  @db.Text
+  expiryDate   DateTime? @map("expiry_date")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([documentType])
+  @@map("asset_documents")
+}
+
+/// QR code records for asset identification and quick-lookup.
+model AssetQrCode {
+  id           String    @id @default(uuid()) @db.Uuid
+  assetId      String    @unique @map("asset_id") @db.Uuid
+  code         String    @unique @db.VarChar(255)
+  format       String    @default("QR_CODE") @db.VarChar(20)
+  imageUrl     String?   @map("image_url") @db.VarChar(500)
+  scanCount    Int       @default(0) @map("scan_count")
+  lastScannedAt DateTime? @map("last_scanned_at")
+  lastScannedBy String?  @map("last_scanned_by") @db.Uuid
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([isActive])
+  @@map("asset_qr_codes")
+}
+
+/// Status change audit trail for every asset.
+model AssetStatusHistory {
+  id               String          @id @default(uuid()) @db.Uuid
+  assetId          String          @map("asset_id") @db.Uuid
+  previousStatus   AssetStatus?    @map("previous_status")
+  newStatus        AssetStatus     @map("new_status")
+  previousCondition AssetCondition? @map("previous_condition")
+  newCondition     AssetCondition? @map("new_condition")
+  reason           String?         @db.Text
+  notes            String?         @db.Text
+  changedBy        String?         @map("changed_by") @db.Uuid
+  changedAt        DateTime        @default(now()) @map("changed_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([newStatus])
+  @@index([changedAt])
+  @@map("asset_status_history")
+}
+
+/// Asset allocation records tracking who has which asset.
+model AssetAllocation {
+  id                 String           @id @default(uuid()) @db.Uuid
+  assetId            String           @map("asset_id") @db.Uuid
+  employeeId         String           @map("employee_id") @db.Uuid
+  allocatedBy        String           @map("allocated_by") @db.Uuid
+  status             AllocationStatus @default(PENDING)
+  allocationDate     DateTime         @default(now()) @map("allocation_date")
+  expectedReturnDate DateTime?        @map("expected_return_date")
+  actualReturnDate   DateTime?        @map("actual_return_date")
+  returnCondition    AssetCondition?  @map("return_condition")
+  returnNotes        String?          @map("return_notes") @db.Text
+  returnVerifiedBy   String?          @map("return_verified_by") @db.Uuid
+  purpose            String?          @db.Text
+  approvalStatus     ApprovalStatus   @default(PENDING) @map("approval_status")
+  approvedBy         String?          @map("approved_by") @db.Uuid
+  approvedAt         DateTime?        @map("approved_at")
+  rejectionReason    String?          @map("rejection_reason") @db.Text
+  notes              String?          @db.Text
+  metadata           Json?            @db.Json
+  createdBy          String?          @map("created_by") @db.Uuid
+  updatedBy          String?          @map("updated_by") @db.Uuid
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  deletedAt          DateTime?        @map("deleted_at")
+
+  // Relations
+  asset    Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user     User              @relation("AllocationUser", fields: [employeeId], references: [id], onDelete: Restrict)
+  allocatedByUser User       @relation("AllocatedByUser", fields: [allocatedBy], references: [id], onDelete: Restrict)
+  approver User?             @relation("ApprovedByAlloc", fields: [approvedBy], references: [id])
+  history  AllocationHistory[]
+  return   AssetReturn?
+
+  @@index([assetId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([allocationDate])
+  @@index([expectedReturnDate])
+  @@index([approvalStatus])
+  @@map("asset_allocations")
+}
+
+/// Historical log of allocation changes for audit purposes.
+model AllocationHistory {
+  id           String           @id @default(uuid()) @db.Uuid
+  allocationId String           @map("allocation_id") @db.Uuid
+  action       String           @db.VarChar(50)
+  oldValues    Json?            @map("old_values") @db.Json
+  newValues    Json?            @map("new_values") @db.Json
+  performedBy  String?          @map("performed_by") @db.Uuid
+  performedAt  DateTime         @default(now()) @map("performed_at")
+  notes        String?          @db.Text
+  ipAddress    String?          @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  allocation AssetAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+
+  @@index([allocationId])
+  @@index([performedAt])
+  @@map("allocation_history")
+}
+
+/// Asset return records tracking when assets are returned.
+model AssetReturn {
+  id              String         @id @default(uuid()) @db.Uuid
+  allocationId    String         @unique @map("allocation_id") @db.Uuid
+  assetId         String         @map("asset_id") @db.Uuid
+  returnedBy      String         @map("returned_by") @db.Uuid
+  verifiedBy      String?        @map("verified_by") @db.Uuid
+  returnDate      DateTime       @default(now()) @map("return_date")
+  condition       AssetCondition
+  damageReport    Json?          @map("damage_report") @db.Json
+  missingItems    Json?          @map("missing_items") @db.Json
+  notes           String?        @db.Text
+  requiresRepair  Boolean        @default(false) @map("requires_repair")
+  photos          Json?          @db.Json
+  status          String         @default("PENDING") @db.VarChar(30)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  allocation AssetAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  asset      Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([returnDate])
+  @@index([status])
+  @@map("asset_returns")
+}
+
+/// Inter-office asset transfer requests.
+model TransferRequest {
+  id               String         @id @default(uuid()) @db.Uuid
+  companyId        String         @map("company_id") @db.Uuid
+  assetId          String         @map("asset_id") @db.Uuid
+  fromOfficeId     String         @map("from_office_id") @db.Uuid
+  toOfficeId       String         @map("to_office_id") @db.Uuid
+  fromLocationId   String?        @map("from_location_id") @db.Uuid
+  toLocationId     String?        @map("to_location_id") @db.Uuid
+  requestedBy      String         @map("requested_by") @db.Uuid
+  status           TransferStatus @default(REQUESTED)
+  priority         PriorityLevel  @default(MEDIUM)
+  reason           String?        @db.Text
+  expectedDate     DateTime?      @map("expected_date")
+  actualDate       DateTime?      @map("actual_date")
+  approvedBy       String?        @map("approved_by") @db.Uuid
+  approvedAt       DateTime?      @map("approved_at")
+  receivedBy       String?        @map("received_by") @db.Uuid
+  receivedAt       DateTime?      @map("received_at")
+  shippingTracking String?        @map("shipping_tracking") @db.VarChar(100)
+  shippingCarrier  String?        @map("shipping_carrier") @db.VarChar(50)
+  shippingCost     Decimal?     @map("shipping_cost") @db.Decimal(10, 2)
+  conditionBefore  AssetCondition? @map("condition_before")
+  conditionAfter   AssetCondition? @map("condition_after")
+  notes            String?        @db.Text
+  metadata         Json?          @db.Json
+  createdBy        String?        @map("created_by") @db.Uuid
+  updatedBy        String?        @map("updated_by") @db.Uuid
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  deletedAt        DateTime?      @map("deleted_at")
+
+  // Relations
+  asset    Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  history  TransferHistory[]
+
+  @@index([companyId])
+  @@index([assetId])
+  @@index([requestedBy])
+  @@index([status])
+  @@index([fromOfficeId])
+  @@index([toOfficeId])
+  @@index([createdAt])
+  @@map("transfer_requests")
+}
+
+/// Transfer status change history.
+model TransferHistory {
+  id          String         @id @default(uuid()) @db.Uuid
+  transferId  String         @map("transfer_id") @db.Uuid
+  action      String         @db.VarChar(50)
+  oldValues   Json?          @db.Json
+  newValues   Json?          @db.Json
+  performedBy String?        @map("performed_by") @db.Uuid
+  performedAt DateTime       @default(now()) @map("performed_at")
+  notes       String?        @db.Text
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  // Relations
+  transfer TransferRequest @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  @@index([transferId])
+  @@index([performedAt])
+  @@map("transfer_history")
+}
+
+// ============================================================================
+// MODULE 27-30: SHARED RESOURCES & BOOKINGS
+// ============================================================================
+
+/// Bookable shared resources (meeting rooms, projectors, vehicles, etc.).
+model SharedResource {
+  id                      String    @id @default(uuid()) @db.Uuid
+  companyId               String    @map("company_id") @db.Uuid
+  assetId                 String?   @unique @map("asset_id") @db.Uuid
+  name                    String    @db.VarChar(200)
+  description             String?   @db.Text
+  resourceType            String    @map("resource_type") @db.VarChar(50)
+  capacity                Int       @default(1)
+  officeId                String?   @map("office_id") @db.Uuid
+  locationId              String?   @map("location_id") @db.Uuid
+  isActive                Boolean   @default(true) @map("is_active")
+  isBookable              Boolean   @default(true) @map("is_bookable")
+  requiresApproval        Boolean   @default(false) @map("requires_approval")
+  maxBookingDurationHours Int?      @map("max_booking_duration_hours")
+  bookingRules            Json?     @map("booking_rules") @db.Json
+  operatingHours          Json?     @map("operating_hours") @db.Json
+  metadata                Json?     @db.Json
+  createdBy               String?   @map("created_by") @db.Uuid
+  updatedBy               String?   @map("updated_by") @db.Uuid
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  deletedAt               DateTime? @map("deleted_at")
+
+  // Relations
+  company  Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  asset    Asset?            @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  bookings ResourceBooking[]
+
+  @@index([companyId])
+  @@index([resourceType])
+  @@index([officeId])
+  @@index([isActive])
+  @@map("shared_resources")
+}
+
+/// Resource booking records for shared resource scheduling.
+model ResourceBooking {
+  id             String        @id @default(uuid()) @db.Uuid
+  resourceId     String        @map("resource_id") @db.Uuid
+  bookedBy       String        @map("booked_by") @db.Uuid
+  status         BookingStatus @default(PENDING)
+  title          String        @db.VarChar(200)
+  description    String?       @db.Text
+  startTime      DateTime      @map("start_time")
+  endTime        DateTime      @map("end_time")
+  actualStart    DateTime?     @map("actual_start")
+  actualEnd      DateTime?     @map("actual_end")
+  recurrenceRule String?       @map("recurrence_rule") @db.VarChar(255)
+  recurrenceEnd  DateTime?     @map("recurrence_end")
+  isRecurring    Boolean       @default(false) @map("is_recurring")
+  parentBookingId String?      @map("parent_booking_id") @db.Uuid
+  attendeeCount  Int           @default(1) @map("attendee_count")
+  notes          String?       @db.Text
+  cancellationReason String?   @map("cancellation_reason") @db.Text
+  cancelledAt    DateTime?     @map("cancelled_at")
+  metadata       Json?         @db.Json
+  createdBy      String?       @map("created_by") @db.Uuid
+  updatedBy      String?       @map("updated_by") @db.Uuid
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+
+  // Relations
+  resource        SharedResource       @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  bookedByUser    User                 @relation("BookedByUser", fields: [bookedBy], references: [id], onDelete: Restrict)
+  participants    BookingParticipant[]
+  history         BookingHistory[]
+
+  @@index([resourceId])
+  @@index([bookedBy])
+  @@index([status])
+  @@index([startTime])
+  @@index([endTime])
+  @@index([resourceId, startTime, endTime])
+  @@map("resource_bookings")
+}
+
+/// Participants in a resource booking.
+model BookingParticipant {
+  id          String    @id @default(uuid()) @db.Uuid
+  bookingId   String    @map("booking_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  status      String    @default("INVITED") @db.VarChar(20)
+  response    String?   @db.VarChar(20)
+  isOrganizer Boolean   @default(false) @map("is_organizer")
+  attended    Boolean?  @db.Boolean
+  checkedInAt DateTime? @map("checked_in_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  booking ResourceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, userId])
+  @@index([bookingId])
+  @@index([userId])
+  @@map("booking_participants")
+}
+
+/// Booking status change history for audit trail.
+model BookingHistory {
+  id          String        @id @default(uuid()) @db.Uuid
+  bookingId   String        @map("booking_id") @db.Uuid
+  action      String        @db.VarChar(50)
+  oldValues   Json?         @db.Json
+  newValues   Json?         @db.Json
+  performedBy String?       @map("performed_by") @db.Uuid
+  performedAt DateTime      @default(now()) @map("performed_at")
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  booking ResourceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([performedAt])
+  @@map("booking_history")
+}
+
+// ============================================================================
+// MODULE 31-34: MAINTENANCE WORKFLOW
+// ============================================================================
+
+/// Maintenance request records for asset upkeep and repairs.
+model MaintenanceRequest {
+  id              String            @id @default(uuid()) @db.Uuid
+  companyId       String            @map("company_id") @db.Uuid
+  assetId         String            @map("asset_id") @db.Uuid
+  requestedBy     String            @map("requested_by") @db.Uuid
+  title           String            @db.VarChar(200)
+  description     String            @db.Text
+  status          MaintenanceStatus @default(REQUESTED)
+  priority        PriorityLevel     @default(MEDIUM)
+  type            String            @default("REPAIR") @db.VarChar(50)
+  estimatedCost   Decimal?        @map("estimated_cost") @db.Decimal(12, 2)
+  actualCost      Decimal?        @map("actual_cost") @db.Decimal(12, 2)
+  approvedBy      String?           @map("approved_by") @db.Uuid
+  approvedAt      DateTime?         @map("approved_at")
+  rejectionReason String?           @map("rejection_reason") @db.Text
+  scheduledDate   DateTime?         @map("scheduled_date")
+  startedAt       DateTime?         @map("started_at")
+  completedAt     DateTime?         @map("completed_at")
+  verifiedBy      String?           @map("verified_by") @db.Uuid
+  verifiedAt      DateTime?         @map("verified_at")
+  verificationNotes String?         @map("verification_notes") @db.Text
+  downtimeHours   Decimal?        @map("downtime_hours") @db.Decimal(8, 2)
+  rootCause       String?           @map("root_cause") @db.Text
+  resolution      String?           @db.Text
+  vendorId        String?           @map("vendor_id") @db.Uuid
+  externalRef     String?           @map("external_ref") @db.VarChar(100)
+  notes           String?           @db.Text
+  metadata        Json?             @db.Json
+  createdBy       String?           @map("created_by") @db.Uuid
+  updatedBy       String?           @map("updated_by") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+
+  // Relations
+  asset          Asset                    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  requestor      User                     @relation("RequestedByMaint", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approver       User?                    @relation("ApprovedByMaint", fields: [approvedBy], references: [id])
+  verifier       User?                    @relation("VerifiedByMaint", fields: [verifiedBy], references: [id])
+  attachments    MaintenanceAttachment[]
+  statusHistory  MaintenanceStatusHistory[]
+  technicians    TechnicianAssignment[]
+
+  @@index([companyId])
+  @@index([assetId])
+  @@index([requestedBy])
+  @@index([status])
+  @@index([priority])
+  @@index([scheduledDate])
+  @@index([createdAt])
+  @@map("maintenance_requests")
+}
+
+/// File attachments for maintenance requests.
+model MaintenanceAttachment {
+  id            String   @id @default(uuid()) @db.Uuid
+  requestId     String   @map("request_id") @db.Uuid
+  fileId        String?  @map("file_id") @db.Uuid
+  attachmentType String  @default("DOCUMENT") @map("attachment_type") @db.VarChar(50)
+  description   String?  @db.Text
+  uploadedBy    String?  @map("uploaded_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  maintenance MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("maintenance_attachments")
+}
+
+/// Maintenance status change history for full audit trail.
+model MaintenanceStatusHistory {
+  id            String            @id @default(uuid()) @db.Uuid
+  requestId     String            @map("request_id") @db.Uuid
+  previousStatus MaintenanceStatus? @map("previous_status")
+  newStatus     MaintenanceStatus @map("new_status")
+  reason        String?           @db.Text
+  changedBy     String?           @map("changed_by") @db.Uuid
+  changedAt     DateTime          @default(now()) @map("changed_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  maintenance MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([changedAt])
+  @@map("maintenance_status_history")
+}
+
+/// Technician assignments for maintenance work orders.
+model TechnicianAssignment {
+  id              String    @id @default(uuid()) @db.Uuid
+  requestId       String    @map("request_id") @db.Uuid
+  technicianId    String    @map("technician_id") @db.Uuid
+  assignedBy      String    @map("assigned_by") @db.Uuid
+  assignedAt      DateTime  @default(now()) @map("assigned_at")
+  role            String    @default("PRIMARY") @db.VarChar(50)
+  status          String    @default("ASSIGNED") @db.VarChar(30)
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  hoursSpent      Decimal?    @map("hours_spent") @db.Decimal(8, 2)
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  maintenance MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([technicianId])
+  @@map("technician_assignments")
+}
+
+// ============================================================================
+// MODULE 35-38: AUDIT WORKFLOW
+// ============================================================================
+
+/// Audit cycles defining periodic asset verification schedules.
+model AuditCycle {
+  id              String     @id @default(uuid()) @db.Uuid
+  companyId       String     @map("company_id") @db.Uuid
+  name            String     @db.VarChar(200)
+  description     String?    @db.Text
+  frequency       String     @db.VarChar(50)
+  frequencyConfig Json?      @map("frequency_config") @db.Json
+  scope           Json?      @db.Json
+  startDate       DateTime   @map("start_date")
+  endDate         DateTime?  @map("end_date")
+  nextAuditDate   DateTime?  @map("next_audit_date")
+  isActive        Boolean    @default(true) @map("is_active")
+  autoAssign      Boolean    @default(true) @map("auto_assign")
+  metadata        Json?      @db.Json
+  createdBy       String?    @map("created_by") @db.Uuid
+  updatedBy       String?    @map("updated_by") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at")
+
+  // Relations
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignments AuditAssignment[]
+  results     AuditResult[]
+
+  @@index([companyId])
+  @@index([isActive])
+  @@index([nextAuditDate])
+  @@index([startDate, endDate])
+  @@map("audit_cycles")
+}
+
+/// Audit assignments linking auditors to audit cycles.
+model AuditAssignment {
+  id             String      @id @default(uuid()) @db.Uuid
+  cycleId        String      @map("cycle_id") @db.Uuid
+  auditorId      String      @map("auditor_id") @db.Uuid
+  officeId       String?     @map("office_id") @db.Uuid
+  departmentId   String?     @map("department_id") @db.Uuid
+  status         AuditStatus @default(SCHEDULED)
+  scheduledDate  DateTime    @map("scheduled_date")
+  startedAt      DateTime?   @map("started_at")
+  completedAt    DateTime?   @map("completed_at")
+  assetCount     Int?        @map("asset_count")
+  auditedCount   Int         @default(0) @map("audited_count")
+  discrepancyCount Int       @default(0) @map("discrepancy_count")
+  notes          String?     @db.Text
+  metadata       Json?       @db.Json
+  createdBy      String?     @map("created_by") @db.Uuid
+  updatedBy      String?     @map("updated_by") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  deletedAt      DateTime?   @map("deleted_at")
+
+  // Relations
+  cycle  AuditCycle    @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [auditorId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleId, auditorId])
+  @@index([cycleId])
+  @@index([auditorId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@map("audit_assignments")
+}
+
+/// Individual audit findings per asset within a cycle.
+model AuditResult {
+  id               String      @id @default(uuid()) @db.Uuid
+  assignmentId     String      @map("assignment_id") @db.Uuid
+  cycleId          String      @map("cycle_id") @db.Uuid
+  assetId          String      @map("asset_id") @db.Uuid
+  status           String      @db.VarChar(30)
+  condition        AssetCondition?
+  locationMatch    Boolean?    @map("location_match")
+  expectedLocation String?     @map("expected_location") @db.VarChar(300)
+  actualLocation   String?     @map("actual_location") @db.VarChar(300)
+  photos           Json?       @db.Json
+  notes            String?     @db.Text
+  auditedAt        DateTime    @default(now()) @map("audited_at")
+  verifiedBy       String?     @map("verified_by") @db.Uuid
+  verifiedAt       DateTime?   @map("verified_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  assignment   AuditAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  cycle        AuditCycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  asset        Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  discrepancies AuditDiscrepancy[]
+
+  @@unique([cycleId, assetId])
+  @@index([assignmentId])
+  @@index([cycleId])
+  @@index([assetId])
+  @@index([status])
+  @@map("audit_results")
+}
+
+/// Discrepancies found during audits requiring resolution.
+model AuditDiscrepancy {
+  id              String        @id @default(uuid()) @db.Uuid
+  resultId        String        @map("result_id") @db.Uuid
+  discrepancyType String        @map("discrepancy_type") @db.VarChar(50)
+  severity        PriorityLevel @default(MEDIUM)
+  description     String        @db.Text
+  expectedValue   Json?         @map("expected_value") @db.Json
+  actualValue     Json?         @map("actual_value") @db.Json
+  status          String        @default("OPEN") @db.VarChar(30)
+  assignedTo      String?       @map("assigned_to") @db.Uuid
+  resolution      String?       @db.Text
+  resolvedAt      DateTime?     @map("resolved_at")
+  resolvedBy      String?       @map("resolved_by") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  result AuditResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@index([resultId])
+  @@index([status])
+  @@index([severity])
+  @@index([assignedTo])
+  @@map("audit_discrepancies")
+}
+
+// ============================================================================
+// MODULE 39-41: NOTIFICATIONS & ACTIVITY
+// ============================================================================
+
+/// Notification records for in-app alerts and messages.
+model Notification {
+  id         String             @id @default(uuid()) @db.Uuid
+  userId     String             @map("user_id") @db.Uuid
+  title      String             @db.VarChar(200)
+  message    String             @db.Text
+  type       String             @db.VarChar(50)
+  status     NotificationStatus @default(UNREAD)
+  priority   PriorityLevel      @default(MEDIUM)
+  entityType String?            @map("entity_type") @db.VarChar(50)
+  entityId   String?            @map("entity_id") @db.Uuid
+  actionUrl  String?            @map("action_url") @db.VarChar(500)
+  metadata   Json?              @db.Json
+  readAt     DateTime?          @map("read_at")
+  archivedAt DateTime?          @map("archived_at")
+  expiresAt  DateTime?          @map("expires_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  deletedAt  DateTime?          @map("deleted_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId, status])
+  @@map("notifications")
+}
+
+/// User notification preferences for controlling alert delivery.
+model NotificationPreference {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @unique @map("user_id") @db.Uuid
+  emailEnabled     Boolean   @default(true) @map("email_enabled")
+  pushEnabled      Boolean   @default(true) @map("push_enabled")
+  smsEnabled       Boolean   @default(false) @map("sms_enabled")
+  inAppEnabled     Boolean   @default(true) @map("in_app_enabled")
+  quietHoursStart  String?   @map("quiet_hours_start") @db.VarChar(5)
+  quietHoursEnd    String?   @map("quiet_hours_end") @db.VarChar(5)
+  mutedTypes       Json?     @map("muted_types") @db.Json
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+/// Comprehensive activity log for all system actions and audit trail.
+model ActivityLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  userId      String?   @map("user_id") @db.Uuid
+  action      String    @db.VarChar(100)
+  entityType  String    @map("entity_type") @db.VarChar(50)
+  entityId    String?   @map("entity_id") @db.Uuid
+  entityName  String?   @map("entity_name") @db.VarChar(200)
+  oldValue    Json?     @map("old_value") @db.Json
+  newValue    Json?     @map("new_value") @db.Json
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.Text
+  deviceInfo  Json?     @map("device_info") @db.Json
+  requestId   String?   @map("request_id") @db.VarChar(100)
+  durationMs  Int?      @map("duration_ms")
+  status      String    @default("SUCCESS") @db.VarChar(20)
+  errorMessage String?  @map("error_message") @db.Text
+  metadata    Json?     @db.Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ============================================================================
+// MODULE 42-47: REPORTS & SYSTEM CONFIGURATION
+// ============================================================================
+
+/// Custom report definitions saved by users.
+model ReportMetadata {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  name           String    @db.VarChar(200)
+  description    String?   @db.Text
+  category       String    @db.VarChar(50)
+  reportType     String    @map("report_type") @db.VarChar(50)
+  dataSource     String?   @map("data_source") @db.VarChar(100)
+  filters        Json?     @db.Json
+  columns        Json?     @db.Json
+  groupBy        Json?     @map("group_by") @db.Json
+  sortBy         Json?     @map("sort_by") @db.Json
+  chartConfig    Json?     @map("chart_config") @db.Json
+  isPublic       Boolean   @default(false) @map("is_public")
+  isScheduled    Boolean   @default(false) @map("is_scheduled")
+  scheduleConfig Json?     @map("schedule_config") @db.Json
+  lastGeneratedAt DateTime? @map("last_generated_at")
+  createdBy      String?   @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  // Relations
+  company Company      @relation("ReportCompany", fields: [companyId], references: [id], onDelete: Cascade)
+  creator User?        @relation("ReportCreator", fields: [createdBy], references: [id])
+
+  @@index([companyId])
+  @@index([category])
+  @@index([createdBy])
+  @@map("report_metadata")
+}
+
+/// Dashboard widget configurations per user.
+model DashboardWidget {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  widgetType String   @map("widget_type") @db.VarChar(50)
+  title      String   @db.VarChar(100)
+  config     Json     @db.Json
+  positionX  Int      @default(0) @map("position_x")
+  positionY  Int      @default(0) @map("position_y")
+  width      Int      @default(1)
+  height     Int      @default(1)
+  refreshIntervalSeconds Int @default(300) @map("refresh_interval_seconds")
+  isVisible  Boolean  @default(true) @map("is_visible")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([widgetType])
+  @@map("dashboard_widgets")
+}
+
+/// Email template definitions for system-generated emails.
+model EmailTemplate {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String    @db.VarChar(100)
+  subject   String    @db.VarChar(255)
+  bodyHtml  String    @map("body_html") @db.Text
+  bodyText  String?   @map("body_text") @db.Text
+  variables Json?     @db.Json
+  category  String    @db.VarChar(50)
+  isActive  Boolean   @default(true) @map("is_active")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@unique([name])
+  @@index([category])
+  @@index([isActive])
+  @@map("email_templates")
+}
+
+/// Global and company-level system settings.
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  key         String   @db.VarChar(100)
+  value       Json     @db.Json
+  type        String   @default("STRING") @db.VarChar(20)
+  category    String   @default("GENERAL") @db.VarChar(50)
+  description String?  @db.Text
+  isPublic    Boolean  @default(false) @map("is_public")
+  validation  Json?    @db.Json
+  updatedBy   String?  @map("updated_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, key])
+  @@index([companyId])
+  @@index([key])
+  @@map("system_settings")
+}
+
+/// Dropdown/lookup value definitions for standardizing form inputs.
+model LookupTable {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  category    String   @db.VarChar(50)
+  code        String   @db.VarChar(50)
+  label       String   @db.VarChar(200)
+  description String?  @db.Text
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  metadata    Json?    @db.Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, category, code])
+  @@index([companyId])
+  @@index([category])
+  @@map("lookup_tables")
+}
+
+/// Master status configuration for customizable workflow states.
+model MasterStatusTable {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String?   @map("company_id") @db.Uuid
+  entityType  String    @map("entity_type") @db.VarChar(50)
+  statusCode  String    @map("status_code") @db.VarChar(50)
+  label       String    @db.VarChar(100)
+  color       String?   @db.VarChar(7)
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  transitions Json?     @db.Json
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, entityType, statusCode])
+  @@index([companyId])
+  @@index([entityType])
+  @@map("master_status_tables")
+}
+
+// ============================================================================
+// MODULE 48-53: LOCATION, CALENDAR & FILE STORAGE
+// ============================================================================
+
+/// Country reference data.
+model Country {
+  id           String  @id @default(uuid()) @db.Uuid
+  name         String  @db.VarChar(100)
+  code         String  @unique @db.VarChar(2)
+  code3        String? @unique @db.VarChar(3)
+  numericCode  String? @unique @map("numeric_code") @db.VarChar(3)
+  phoneCode    String? @map("phone_code") @db.VarChar(10)
+  currencyCode String? @map("currency_code") @db.VarChar(3)
+  timezone     String? @db.VarChar(50)
+  isActive     Boolean @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  states State[]
+
+  @@index([code])
+  @@map("countries")
+}
+
+/// State/province reference data.
+model State {
+  id        String  @id @default(uuid()) @db.Uuid
+  countryId String  @map("country_id") @db.Uuid
+  name      String  @db.VarChar(100)
+  code      String  @db.VarChar(10)
+  isActive  Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  country Country @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  cities  City[]
+
+  @@unique([countryId, code])
+  @@index([countryId])
+  @@map("states")
+}
+
+/// City reference data.
+model City {
+  id         String   @id @default(uuid()) @db.Uuid
+  stateId    String   @map("state_id") @db.Uuid
+  name       String   @db.VarChar(100)
+  postalCode String?  @map("postal_code") @db.VarChar(20)
+  latitude   Decimal? @db.Decimal(10, 8)
+  longitude  Decimal? @db.Decimal(11, 8)
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  state State @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@index([stateId])
+  @@index([name])
+  @@map("cities")
+}
+
+/// Company-specific holiday calendars.
+model HolidayCalendar {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  officeId    String?   @map("office_id") @db.Uuid
+  name        String    @db.VarChar(200)
+  date        DateTime  @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  type        String    @default("PUBLIC") @db.VarChar(50)
+  isRecurring Boolean   @default(false) @map("is_recurring")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([officeId])
+  @@index([date])
+  @@map("holiday_calendars")
+}
+
+/// Office working hours configuration.
+model WorkingHour {
+  id            String   @id @default(uuid()) @db.Uuid
+  officeId      String   @map("office_id") @db.Uuid
+  dayOfWeek     Int      @map("day_of_week")
+  startTime     String   @map("start_time") @db.VarChar(5)
+  endTime       String   @map("end_time") @db.VarChar(5)
+  breakStart    String?  @map("break_start") @db.VarChar(5)
+  breakEnd      String?  @map("break_end") @db.VarChar(5)
+  isWorkingDay  Boolean  @default(true) @map("is_working_day")
+  effectiveFrom DateTime @default(now()) @map("effective_from") @db.Date
+  effectiveUntil DateTime? @map("effective_until") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([officeId, dayOfWeek, effectiveFrom])
+  @@index([officeId])
+  @@map("working_hours")
+}
+
+/// File storage tracking for uploaded files.
+model FileStorage {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  uploadedBy   String   @map("uploaded_by") @db.Uuid
+  originalName String   @map("original_name") @db.VarChar(255)
+  fileName     String   @map("file_name") @db.VarChar(255)
+  mimeType     String   @map("mime_type") @db.VarChar(100)
+  fileSize     BigInt   @map("file_size")
+  filePath     String   @map("file_path") @db.VarChar(500)
+  storageType  String   @default("LOCAL") @map("storage_type") @db.VarChar(20)
+  bucket       String?  @db.VarChar(100)
+  checksum     String?  @db.VarChar(64)
+  thumbnailPath String? @map("thumbnail_path") @db.VarChar(500)
+  metadata     Json?    @db.Json
+  isPublic     Boolean  @default(false) @map("is_public")
+  accessCount  Int      @default(0) @map("access_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([uploadedBy])
+  @@index([mimeType])
+  @@map("file_storages")
+}
+
+// ============================================================================
+// MODULE 54-57: TAGS, LABELS & CUSTOM ATTRIBUTES
+// ============================================================================
+
+/// Reusable tags for flexible asset classification.
+model Tag {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  color       String?  @db.VarChar(7)
+  description String?  @db.Text
+  usageCount  Int      @default(0) @map("usage_count")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // Relations
+  company Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assets  AssetTag[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([name])
+  @@map("tags")
+}
+
+/// Junction: Assets ↔ Tags (many-to-many).
+model AssetTag {
+  id        String   @id @default(uuid()) @db.Uuid
+  assetId   String   @map("asset_id") @db.Uuid
+  tagId     String   @map("tag_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, tagId])
+  @@index([assetId])
+  @@index([tagId])
+  @@map("asset_tags")
+}
+
+/// Physical labels (QR/barcode/RFID) attached to assets.
+model AssetLabel {
+  id         String    @id @default(uuid()) @db.Uuid
+  assetId    String    @map("asset_id") @db.Uuid
+  labelType  String    @default("STANDARD") @map("label_type") @db.VarChar(50)
+  templateId String?   @map("template_id") @db.Uuid
+  content    Json      @db.Json
+  printData  String?   @map("print_data") @db.Text
+  printedAt  DateTime? @map("printed_at")
+  printedBy  String?   @map("printed_by") @db.Uuid
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@map("asset_labels")
+}
+
+/// Entity-agnostic custom attribute definitions.
+model CustomAttribute {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  entityType   String   @map("entity_type") @db.VarChar(50)
+  name         String   @db.VarChar(100)
+  label        String   @db.VarChar(100)
+  fieldType    String   @map("field_type") @db.VarChar(30)
+  isRequired   Boolean  @default(false) @map("is_required")
+  isFilterable Boolean  @default(false) @map("is_filterable")
+  isSearchable Boolean  @default(false) @map("is_searchable")
+  defaultValue Json?    @map("default_value") @db.Json
+  options      Json?    @db.Json
+  validation   Json?    @db.Json
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, entityType, name])
+  @@index([companyId])
+  @@index([entityType])
+  @@map("custom_attributes")
+}
+
+// ============================================================================
+// MODULE 58-66: SECURITY & FUTURE
+// ============================================================================
+
+/// API tokens for programmatic access and integrations.
+model ApiToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  tokenHash   String    @unique @map("token_hash") @db.VarChar(255)
+  prefix      String    @db.VarChar(10)
+  scopes      Json?     @db.Json
+  rateLimit   Int       @default(1000) @map("rate_limit")
+  expiresAt   DateTime? @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  company Company @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([isActive])
+  @@map("api_tokens")
+}
+
+/// IoT sensor definitions deployed on assets for real-time monitoring.
+model FutureIotSensor {
+  id         String    @id @default(uuid()) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  assetId    String?   @map("asset_id") @db.Uuid
+  sensorType String    @map("sensor_type") @db.VarChar(50)
+  sensorId   String    @unique @map("sensor_id") @db.VarChar(100)
+  name       String    @db.VarChar(100)
+  status     String    @default("ACTIVE") @db.VarChar(30)
+  config     Json?     @db.Json
+  metadata   Json?     @db.Json
+  lastReadingAt DateTime? @map("last_reading_at")
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  readings FutureIotReading[]
+
+  @@index([companyId])
+  @@index([assetId])
+  @@index([sensorType])
+  @@index([isActive])
+  @@map("future_iot_sensors")
+}
+
+/// IoT sensor readings time-series data.
+model FutureIotReading {
+  id          String   @id @default(uuid()) @db.Uuid
+  sensorId    String   @map("sensor_id") @db.Uuid
+  metricName  String   @map("metric_name") @db.VarChar(100)
+  metricValue Float    @map("metric_value")
+  unit        String?  @db.VarChar(20)
+  quality     String   @default("GOOD") @db.VarChar(20)
+  recordedAt  DateTime @default(now()) @map("recorded_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  sensor FutureIotSensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([sensorId])
+  @@index([recordedAt])
+  @@index([sensorId, metricName, recordedAt])
+  @@map("future_iot_readings")
+}
+
+/// RFID tag definitions for asset tracking.
+model FutureRfidTag {
+  id            String    @id @default(uuid()) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  assetId       String?   @unique @map("asset_id") @db.Uuid
+  tagEpc        String    @unique @map("tag_epc") @db.VarChar(255)
+  tagType       String    @map("tag_type") @db.VarChar(50)
+  frequency     String?   @db.VarChar(20)
+  status        String    @default("ACTIVE") @db.VarChar(30)
+  lastSeenAt    DateTime? @map("last_seen_at")
+  lastReaderId  String?   @map("last_reader_id") @db.VarChar(100)
+  metadata      Json?     @db.Json
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([tagEpc])
+  @@index([status])
+  @@map("future_rfid_tags")
+}
+
+/// Barcode scan events for asset tracking.
+model FutureBarcodeScan {
+  id          String   @id @default(uuid()) @db.Uuid
+  assetId     String?  @map("asset_id") @db.Uuid
+  barcode     String   @db.VarChar(100)
+  scanType    String   @map("scan_type") @db.VarChar(50)
+  scannedBy   String?  @map("scanned_by") @db.Uuid
+  deviceId    String?  @map("device_id") @db.VarChar(100)
+  locationData Json?   @map("location_data") @db.Json
+  result      Json?    @db.Json
+  scannedAt   DateTime @default(now()) @map("scanned_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([assetId])
+  @@index([barcode])
+  @@index([scannedAt])
+  @@map("future_barcode_scans")
+}
+
+// ============================================================================
+// MODULE 67: AI PREDICTION DATA
+// ============================================================================
+
+/// AI prediction records for asset lifecycle analytics and insights.
+model AiPrediction {
+  id             String    @id @default(uuid()) @db.Uuid
+  companyId      String    @map("company_id") @db.Uuid
+  assetId        String?   @map("asset_id") @db.Uuid
+  predictionType String    @map("prediction_type") @db.VarChar(100)
+  modelVersion   String?   @map("model_version") @db.VarChar(50)
+  confidence     Decimal?  @db.Decimal(5, 4)
+  inputFeatures  Json?     @map("input_features") @db.Json
+  outputResult   Json?     @map("output_result") @db.Json
+  predictedValue Float?    @map("predicted_value")
+  predictedDate  DateTime? @map("predicted_date")
+  actualValue    Float?    @map("actual_value")
+  actualDate     DateTime? @map("actual_date")
+  isActive       Boolean   @default(true) @map("is_active")
+  generatedAt    DateTime  @default(now()) @map("generated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([assetId])
+  @@index([predictionType])
+  @@index([generatedAt])
+  @@index([isActive])
+  @@map("ai_predictions")
+}
+
+// ============================================================================
+// CROSS-CUTTING: APPROVAL WORKFLOW
+// ============================================================================
+
+/// Generic approval workflow requests used across allocations, transfers, etc.
+model ApprovalRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  entityType      String         @map("entity_type") @db.VarChar(50)
+  entityId        String         @map("entity_id") @db.Uuid
+  requestedBy     String         @map("requested_by") @db.Uuid
+  approvedBy      String?        @map("approved_by") @db.Uuid
+  status          ApprovalStatus @default(PENDING)
+  priority        PriorityLevel  @default(MEDIUM)
+  comments        String?        @db.Text
+  rejectionReason String?        @map("rejection_reason") @db.Text
+  requestedAt     DateTime       @default(now()) @map("requested_at")
+  respondedAt     DateTime?      @map("responded_at")
+  expiresAt       DateTime?      @map("expires_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  requestor User  @relation("ApprovalRequestor", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approver  User? @relation("ApprovalApprover", fields: [approvedBy], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([requestedBy])
+  @@index([approvedBy])
+  @@index([status])
+  @@index([createdAt])
+  @@map("approval_requests")
 }
